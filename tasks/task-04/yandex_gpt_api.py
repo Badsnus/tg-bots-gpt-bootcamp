@@ -1,46 +1,27 @@
 import os
-import time
 
-import requests
 from dotenv import load_dotenv
+from yandex_cloud_ml_sdk import YCloudML
 
-# переименуй файл .env.dist в .env и подставь соотвествующие данные
 load_dotenv()
-folder_id = os.getenv("YANDEX_FOLDER_ID")
-api_key = os.getenv("YANDEX_API_KEY")
-gpt_model = 'yandexgpt-lite'
+
+sdk = YCloudML(
+    folder_id=os.getenv("YANDEX_FOLDER_ID"),
+    auth=os.getenv("YANDEX_API_KEY"),
+)
+model = sdk.models.completions('yandexgpt-lite')
+model.configure(
+    temperature=0.3,
+    max_tokens=2000,
+)
 
 system_prompt = 'Ты ассистент программиста. Напиши короткую программу-пример на указанном языке программирования. В ответе пришли только код.'
 user_prompt = "F#"
+messages = [
+    {'role': 'system', 'text': system_prompt},
+    {'role': 'user', 'text': user_prompt},
+]
 
-body = {
-    'modelUri': f'gpt://{folder_id}/{gpt_model}',
-    'completionOptions': {'stream': False, 'temperature': 0.3, 'maxTokens': 2000},
-    'messages': [
-        {'role': 'system', 'text': system_prompt},
-        {'role': 'user', 'text': user_prompt},
-    ],
-}
-url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/completionAsync'
-headers = {
-    'Content-Type': 'application/json',
-    'Authorization': f'Api-Key {api_key}'
-}
-
-response = requests.post(url, headers=headers, json=body)
-operation_id = response.json().get('id')
-
-url = f"https://llm.api.cloud.yandex.net:443/operations/{operation_id}"
-headers = {"Authorization": f"Api-Key {api_key}"}
-
-while True:
-    response = requests.get(url, headers=headers)
-    done = response.json()["done"]
-    if done:
-        break
-    time.sleep(2)
-
-data = response.json()
-answer = data['response']['alternatives'][0]['message']['text']
-
-print(answer)
+operation = model.run_deferred(messages)
+result = operation.wait()
+print(result.text)
